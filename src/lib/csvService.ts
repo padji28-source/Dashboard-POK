@@ -1,29 +1,31 @@
-import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 export interface CSVData {
   [key: string]: string | number;
 }
 
-export const fetchCSVData = async (url: string): Promise<CSVData[]> => {
+export const fetchCSVData = async (url: string, sheetName: string = 'Update MTS POK', rowOffset: number = 0): Promise<CSVData[]> => {
   try {
-    const response = await fetch(url);
-    const csvText = await response.text();
+    // If user provides a base pub URL, ensure we fetch as XLSX to access multiple sheets
+    const fetchUrl = url.replace('output=csv', 'output=xlsx');
+    const response = await fetch(fetchUrl);
+    const arrayBuffer = await response.arrayBuffer();
     
-    return new Promise((resolve, reject) => {
-      Papa.parse(csvText, {
-        header: true,
-        dynamicTyping: true,
-        skipEmptyLines: true,
-        complete: (results) => {
-          resolve(results.data as CSVData[]);
-        },
-        error: (error: Error) => {
-          reject(error);
-        }
-      });
-    });
+    // Parse workbook
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    
+    // Specifically extract requested sheet
+    const targetSheetName = sheetName;
+    const worksheet = workbook.Sheets[targetSheetName];
+    
+    if (!worksheet) {
+      throw new Error(`Sheet "${targetSheetName}" not found.`);
+    }
+
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '', range: rowOffset }) as CSVData[];
+    return jsonData;
   } catch (error) {
-    console.error('Error fetching CSV:', error);
+    console.error('Error fetching/parsing Data:', error);
     throw error;
   }
 };

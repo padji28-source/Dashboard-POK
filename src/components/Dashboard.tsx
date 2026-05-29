@@ -73,7 +73,8 @@ import {
   Bot,
   MessageSquare,
   X,
-  Loader2
+  Loader2,
+  Database
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -88,10 +89,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import DataAll from './DataAll';
+
 const CSV_URL =
-  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?gid=32687697&single=true&output=csv';
+  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSbvA_5FOxi2-nkfz8iJbptOhDfBCLM5LnTwrVLeJ4pf1hlGjSBywsTXQYYtEjuo0DY2M63wcJmc0tP/pub?output=csv';
 
 export default function Dashboard() {
+  const [showDataAll, setShowDataAll] = useState(false);
   const [data, setData] =
     useState<CSVData[]>([]);
 
@@ -204,10 +208,13 @@ export default function Dashboard() {
           getCol('uom'),
           getCol('startqty'),
           getCol('mr'),
+          getCol('cr+'),
           getCol('matto+'),
           getCol('prod+'),
           getCol('ship-'),
+          getCol('vendret-'),
           getCol('matfrom-'),
+          getCol('p-'),
           getCol('adj+'),
           getCol('lastqty'),
           getCol('moveqty'),
@@ -485,10 +492,15 @@ export default function Dashboard() {
       };
     }
 
-    return filteredData.reduce(
+    return filteredData.reduce<{
+      plus: number;
+      minus: number;
+      balanced: number;
+      totalSelisih: number;
+    }>(
       (acc, row) => {
-        const val =
-          Number(row[selisihCol]) || 0;
+        const val: number =
+          Number(String(row[selisihCol] ?? 0).replace(/,/g, '')) || 0;
 
         if (val > 0) acc.plus++;
         else if (val < 0)
@@ -500,10 +512,10 @@ export default function Dashboard() {
         return acc;
       },
       {
-        plus: 0,
-        minus: 0,
-        balanced: 0,
-        totalSelisih: 0,
+        plus: 0 as number,
+        minus: 0 as number,
+        balanced: 0 as number,
+        totalSelisih: 0 as number,
       }
     );
   }, [filteredData, reportColumns]);
@@ -658,7 +670,7 @@ export default function Dashboard() {
         totalItemPlus: stockAnalysis.plus,
         totalItemMinus: stockAnalysis.minus,
         totalItemBalanced: stockAnalysis.balanced,
-        topSelisihItem: chartDataSelisih
+        topSelisihItem: analyticsData
       };
     } else if (aiMode === "discrepancy") {
       payloadData = filteredData.filter(d => {
@@ -693,6 +705,10 @@ export default function Dashboard() {
       setAiGenerating(false);
     }
   };
+
+  if (showDataAll) {
+    return <DataAll csvUrl={CSV_URL} onBack={() => setShowDataAll(false)} />;
+  }
 
   return (
   <div className="min-h-screen bg-slate-50 font-sans">
@@ -761,6 +777,15 @@ export default function Dashboard() {
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Export Excel
+          </Button>
+
+          {/* DATA ALL */}
+          <Button
+            onClick={() => setShowDataAll(true)}
+            className="h-10 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+          >
+            <Database className="w-4 h-4 mr-2" />
+            Data All
           </Button>
         </div>
       </div>
