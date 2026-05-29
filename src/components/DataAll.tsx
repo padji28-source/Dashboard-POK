@@ -47,9 +47,9 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [whGroupFilter, setWhGroupFilter] = useState('all');
-  const [areaFilter, setAreaFilter] = useState('all');
-  const [locatorFilter, setLocatorFilter] = useState('all');
+  const [whGroupFilter, setWhGroupFilter] = useState<string[]>([]);
+  const [areaFilter, setAreaFilter] = useState<string[]>([]);
+  const [locatorFilter, setLocatorFilter] = useState<string[]>([]);
 
   // Sorting
   const [sortConfig, setSortConfig] = useState<{
@@ -92,7 +92,16 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
 
       setData(filteredResult);
       if (filteredResult.length > 0) {
-        setColumns(Object.keys(filteredResult[0]));
+        const allKeys = Object.keys(filteredResult[0]);
+        const targetCols = ['WH Group', 'WH Type', 'Area', 'Locator', 'Name', 'UOM', 'Last Qty'];
+        
+        const exactCols = targetCols.map(tc => {
+            const found = allKeys.find(k => k.toLowerCase().replace(/\n/g, ' ') === tc.toLowerCase() || k.toLowerCase().replace(/\n/g, ' ').includes(tc.toLowerCase()));
+            return found || tc;
+        });
+
+        // Filter out any that were not found (though they all should be if names are correct)
+        setColumns(exactCols);
       }
 
       toast.success('MTS2 Data loaded successfully');
@@ -148,14 +157,14 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
     let result = data;
 
     // Filters
-    if (whGroupFilter !== 'all' && filterOptions.whCol) {
-      result = result.filter(r => String(r[filterOptions.whCol] || '').trim() === whGroupFilter);
+    if (whGroupFilter.length > 0 && filterOptions.whCol) {
+      result = result.filter(r => whGroupFilter.includes(String(r[filterOptions.whCol] || '').trim()));
     }
-    if (areaFilter !== 'all' && filterOptions.areaCol) {
-      result = result.filter(r => String(r[filterOptions.areaCol] || '').trim() === areaFilter);
+    if (areaFilter.length > 0 && filterOptions.areaCol) {
+      result = result.filter(r => areaFilter.includes(String(r[filterOptions.areaCol] || '').trim()));
     }
-    if (locatorFilter !== 'all' && filterOptions.locCol) {
-      result = result.filter(r => String(r[filterOptions.locCol] || '').trim() === locatorFilter);
+    if (locatorFilter.length > 0 && filterOptions.locCol) {
+      result = result.filter(r => locatorFilter.includes(String(r[filterOptions.locCol] || '').trim()));
     }
 
     // Search
@@ -311,14 +320,15 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
 
               {/* WH GROUP */}
               {filterOptions.whGroups.length > 0 && (
-                <div className="w-[200px] z-20 relative">
+                <div className="min-w-[250px] flex-1 max-w-sm z-20 relative">
                   <Select
-                    options={[{ value: 'all', label: 'Semua WH Group' }, ...filterOptions.whGroups.map(g => ({ value: g, label: g }))]}
-                    value={{ value: whGroupFilter, label: whGroupFilter === 'all' ? 'Semua WH Group' : whGroupFilter }}
-                    onChange={(selected: any) => { setWhGroupFilter(selected.value); setCurrentPage(1); }}
+                    isMulti
+                    options={filterOptions.whGroups.map(g => ({ value: g, label: g }))}
+                    value={whGroupFilter.map(g => ({ value: g, label: g }))}
+                    onChange={(selected: any) => { setWhGroupFilter(selected ? selected.map((s: any) => s.value) : []); setCurrentPage(1); }}
                     className="text-sm"
                     classNamePrefix="rs"
-                    placeholder="Semua WH Group"
+                    placeholder="Semua WH Group..."
                     styles={{ control: (base) => ({ ...base, minHeight: '40px', borderRadius: '0.5rem', borderColor: '#e2e8f0' }) }}
                   />
                 </div>
@@ -326,14 +336,15 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
 
               {/* AREA */}
               {filterOptions.areas.length > 0 && (
-                <div className="w-[180px] z-20 relative">
+                <div className="min-w-[200px] flex-1 max-w-sm z-20 relative">
                   <Select
-                    options={[{ value: 'all', label: 'Semua Area' }, ...filterOptions.areas.map(g => ({ value: g, label: g }))]}
-                    value={{ value: areaFilter, label: areaFilter === 'all' ? 'Semua Area' : areaFilter }}
-                    onChange={(selected: any) => { setAreaFilter(selected.value); setCurrentPage(1); }}
+                    isMulti
+                    options={filterOptions.areas.map(g => ({ value: g, label: g }))}
+                    value={areaFilter.map(g => ({ value: g, label: g }))}
+                    onChange={(selected: any) => { setAreaFilter(selected ? selected.map((s: any) => s.value) : []); setCurrentPage(1); }}
                     className="text-sm"
                     classNamePrefix="rs"
-                    placeholder="Semua Area"
+                    placeholder="Semua Area..."
                     styles={{ control: (base) => ({ ...base, minHeight: '40px', borderRadius: '0.5rem', borderColor: '#e2e8f0' }) }}
                   />
                 </div>
@@ -341,14 +352,15 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
 
               {/* LOCATOR */}
               {filterOptions.locators.length > 0 && (
-                <div className="w-[200px] z-20 relative">
+                <div className="min-w-[250px] flex-1 max-w-sm z-20 relative">
                   <Select
-                    options={[{ value: 'all', label: 'Semua Locator' }, ...filterOptions.locators.map(g => ({ value: g, label: g }))]}
-                    value={{ value: locatorFilter, label: locatorFilter === 'all' ? 'Semua Locator' : locatorFilter }}
-                    onChange={(selected: any) => { setLocatorFilter(selected.value); setCurrentPage(1); }}
+                    isMulti
+                    options={filterOptions.locators.map(g => ({ value: g, label: g }))}
+                    value={locatorFilter.map(g => ({ value: g, label: g }))}
+                    onChange={(selected: any) => { setLocatorFilter(selected ? selected.map((s: any) => s.value) : []); setCurrentPage(1); }}
                     className="text-sm"
                     classNamePrefix="rs"
-                    placeholder="Semua Locator"
+                    placeholder="Semua Locator..."
                     styles={{ control: (base) => ({ ...base, minHeight: '40px', borderRadius: '0.5rem', borderColor: '#e2e8f0' }) }}
                   />
                 </div>
