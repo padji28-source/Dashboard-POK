@@ -62,6 +62,9 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ArrowUpDown,
   ClipboardList,
   TrendingDown,
   TrendingUp,
@@ -110,6 +113,11 @@ export default function Dashboard() {
 
   const [visibleColumns, setVisibleColumns] =
     useState<string[]>([]);
+
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
 
   const [selectedCabang, setSelectedCabang] =
     useState('all');
@@ -302,6 +310,23 @@ export default function Dashboard() {
   }, [data, cabangColumn]);
 
   // =============================
+  // HANDLE SORT
+  // =============================
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (
+      sortConfig &&
+      sortConfig.key === key &&
+      sortConfig.direction === 'asc'
+    ) {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+    setCurrentPage(1);
+  };
+
+  // =============================
   // FILTER DATA
   // =============================
 
@@ -334,12 +359,42 @@ export default function Dashboard() {
       );
     }
 
+    // SORTING
+    if (sortConfig !== null) {
+      result = [...result].sort((a, b) => {
+        const valA = a[sortConfig.key];
+        const valB = b[sortConfig.key];
+
+        if (valA === valB) return 0;
+        
+        // Try numeric sort first
+        const numA = Number(String(valA).replace(/,/g, ''));
+        const numB = Number(String(valB).replace(/,/g, ''));
+        
+        if (!isNaN(numA) && !isNaN(numB) && valA !== null && valA !== undefined && valA !== "" && valB !== null && valB !== undefined && valB !== "") {
+          return sortConfig.direction === 'asc' ? numA - numB : numB - numA;
+        }
+
+        const strA = String(valA ?? '').toLowerCase();
+        const strB = String(valB ?? '').toLowerCase();
+
+        if (strA < strB) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (strA > strB) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
     return result;
   }, [
     data,
     searchTerm,
     selectedCabang,
     cabangColumn,
+    sortConfig,
   ]);
 
   // =============================
@@ -934,9 +989,23 @@ export default function Dashboard() {
                     {visibleColumns.map((col) => (
                       <TableHead
                         key={col}
-                        className="h-10 text-xs font-semibold text-slate-500 uppercase tracking-tight whitespace-nowrap"
+                        onClick={() => handleSort(col)}
+                        className="h-10 text-xs font-semibold text-slate-500 uppercase tracking-tight whitespace-nowrap cursor-pointer hover:bg-slate-100 transition-colors select-none group"
                       >
-                        {col}
+                        <div className="flex items-center gap-1">
+                          {col}
+                          <span className="flex items-center">
+                            {sortConfig?.key === col ? (
+                              sortConfig.direction === 'asc' ? (
+                                <ChevronUp className="w-3.5 h-3.5 text-slate-700" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5 text-slate-700" />
+                              )
+                            ) : (
+                              <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </span>
+                        </div>
                       </TableHead>
                     ))}
                   </TableRow>
@@ -987,7 +1056,7 @@ export default function Dashboard() {
 
     {/* HEADER */}
     <div className="border-b border-slate-200 bg-white px-6 py-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-slate-900 tracking-tight">
             Laporan Stock
@@ -998,13 +1067,73 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <Button
-          onClick={exportToExcel}
-          className="h-10 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Download Excel
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {/* SEARCH */}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Cari barang, locator..."
+              className="pl-9 w-[280px] h-10 text-sm rounded-lg border-slate-200 bg-white"
+            />
+          </div>
+
+          {/* CABANG */}
+          {cabangList.length > 0 && (
+            <Select
+              value={selectedCabang}
+              onValueChange={(val) => {
+                setSelectedCabang(val);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[180px] h-10 text-sm rounded-lg border-slate-200 bg-white">
+                <SelectValue placeholder="Semua Cabang" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="all">Semua Cabang</SelectItem>
+                {cabangList.map((cabang) => (
+                  <SelectItem key={cabang} value={cabang}>
+                    {cabang}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* PAGE */}
+          <Select
+            value={pageSize.toString()}
+            onValueChange={(val) => {
+              setPageSize(Number(val));
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[110px] h-10 text-sm rounded-lg border-slate-200 bg-white">
+              <SelectValue />
+            </SelectTrigger>
+
+            <SelectContent>
+              <SelectItem value="10">10 / page</SelectItem>
+              <SelectItem value="20">20 / page</SelectItem>
+              <SelectItem value="50">50 / page</SelectItem>
+              <SelectItem value="100">100 / page</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            onClick={exportToExcel}
+            className="h-10 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white shadow-sm ml-2"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Download Excel
+          </Button>
+        </div>
       </div>
     </div>
 
@@ -1016,9 +1145,23 @@ export default function Dashboard() {
             {reportColumns.map((col) => (
               <TableHead
                 key={col}
-                className="h-10 text-xs font-semibold text-slate-500 uppercase tracking-tight whitespace-nowrap"
+                onClick={() => handleSort(col)}
+                className="h-10 text-xs font-semibold text-slate-500 uppercase tracking-tight whitespace-nowrap cursor-pointer hover:bg-slate-100 transition-colors select-none group"
               >
-                {col}
+                <div className="flex items-center gap-1">
+                  {col}
+                  <span className="flex items-center">
+                    {sortConfig?.key === col ? (
+                      sortConfig.direction === 'asc' ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-700" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-700" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </span>
+                </div>
               </TableHead>
             ))}
           </TableRow>
