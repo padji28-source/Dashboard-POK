@@ -49,6 +49,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend,
 } from 'recharts';
 
 import {
@@ -128,6 +129,12 @@ export default function Dashboard() {
 
   const [lastSyncTime, setLastSyncTime] =
     useState<Date | null>(null);
+
+  // States for custom Area Analytics All Cabang & Table Selisih
+  const [chartViewMode, setChartViewMode] = useState<'percentage' | 'absolute'>('percentage');
+  const [selisihCurrentPage, setSelisihCurrentPage] = useState(1);
+  const [selisihPageSize, setSelisihPageSize] = useState(10);
+  const [selisihSearchTerm, setSelisihSearchTerm] = useState('');
 
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -565,6 +572,124 @@ export default function Dashboard() {
   };
 
   // =============================
+  // AREA ANALYTICS ALL CABANG & TABLE SELISIH DATA
+  // =============================
+
+  const areaAnalyticsAllCabang = useMemo(() => {
+    if (!data.length) return [];
+
+    const keys = Object.keys(data[0] || {});
+    const findCol = (kw: string) => keys.find(c => c.toLowerCase().replace(/[\s_.-]/g, '').includes(kw.replace(/[\s_.-]/g, ''))) || '';
+    
+    const areaCol = findCol('cabang') || findCol('area');
+    const lastQtyCol = findCol('lastqty');
+    const moveQtyCol = findCol('moveqty');
+    const selisihCol = findCol('selisih');
+
+    if (!areaCol) return [];
+
+    const groups: { [area: string]: { lastQty: number; moveQty: number; selisih: number } } = {};
+    let totalLastQty = 0;
+    let totalMoveQty = 0;
+    let totalSelisih = 0;
+
+    data.forEach((row) => {
+      const areaVal = String(row[areaCol] || '').trim();
+      if (!areaVal) return;
+      
+      const lastQtyVal = Number(String(row[lastQtyCol] ?? 0).replace(/,/g, '')) || 0;
+      const moveQtyVal = Number(String(row[moveQtyCol] ?? 0).replace(/,/g, '')) || 0;
+      const selisihVal = Number(String(row[selisihCol] ?? 0).replace(/,/g, '')) || 0;
+
+      if (!groups[areaVal]) {
+        groups[areaVal] = { lastQty: 0, moveQty: 0, selisih: 0 };
+      }
+      groups[areaVal].lastQty += lastQtyVal;
+      groups[areaVal].moveQty += moveQtyVal;
+      groups[areaVal].selisih += selisihVal;
+
+      totalLastQty += Math.abs(lastQtyVal);
+      totalMoveQty += Math.abs(moveQtyVal);
+      totalSelisih += Math.abs(selisihVal);
+    });
+
+    return Object.entries(groups).map(([area, vals]) => {
+      const pctLastQty = totalLastQty ? (Math.abs(vals.lastQty) / totalLastQty) * 100 : 0;
+      const pctMoveQty = totalMoveQty ? (Math.abs(vals.moveQty) / totalMoveQty) * 100 : 0;
+      const pctSelisih = totalSelisih ? (Math.abs(vals.selisih) / totalSelisih) * 100 : 0;
+
+      return {
+        area,
+        lastQty: Math.round(vals.lastQty * 100) / 100,
+        moveQty: Math.round(vals.moveQty * 100) / 100,
+        selisih: Math.round(vals.selisih * 100) / 100,
+        pctLastQty: Math.round(pctLastQty * 100) / 100,
+        pctMoveQty: Math.round(pctMoveQty * 100) / 100,
+        pctSelisih: Math.round(pctSelisih * 100) / 100,
+      };
+    }).sort((a, b) => b.lastQty - a.lastQty);
+  }, [data]);
+
+  const selisihTableKeys = useMemo(() => {
+    if (!data.length) return {
+      cabangCol: '',
+      locatorCol: '',
+      searchKeyCol: '',
+      nameCol: '',
+      uomCol: '',
+      lastQtyCol: '',
+      moveQtyCol: '',
+      selisihCol: '',
+    };
+    const allCols = Object.keys(data[0]);
+    const findCol = (kw: string) => allCols.find(c => c.toLowerCase().replace(/[\s_.-]/g, '').includes(kw.replace(/[\s_.-]/g, ''))) || '';
+    
+    return {
+      cabangCol: findCol('cabang'),
+      locatorCol: findCol('locator'),
+      searchKeyCol: findCol('searchkey'),
+      nameCol: findCol('name'),
+      uomCol: findCol('uom'),
+      lastQtyCol: findCol('lastqty'),
+      moveQtyCol: findCol('moveqty'),
+      selisihCol: findCol('selisih'),
+    };
+  }, [data]);
+
+  const selisihTableData = useMemo(() => {
+    if (!data.length) return [];
+    const { selisihCol } = selisihTableKeys;
+    if (!selisihCol) return [];
+
+    let filtered = data.filter((row) => {
+      const val = Number(String(row[selisihCol] ?? 0).replace(/,/g, '')) || 0;
+      return val !== 0;
+    });
+
+    if (selisihSearchTerm.trim()) {
+      const sLower = selisihSearchTerm.toLowerCase();
+      filtered = filtered.filter((row) =>
+        Object.values(row).some((val) =>
+          String(val).toLowerCase().includes(sLower)
+        )
+      );
+    }
+
+    return [...filtered].sort((a, b) => {
+      const valA = Math.abs(Number(String(a[selisihCol] ?? 0).replace(/,/g, '')) || 0);
+      const valB = Math.abs(Number(String(b[selisihCol] ?? 0).replace(/,/g, '')) || 0);
+      return valB - valA;
+    });
+  }, [data, selisihTableKeys, selisihSearchTerm]);
+
+  const paginatedSelisihData = useMemo(() => {
+    const start = (selisihCurrentPage - 1) * selisihPageSize;
+    return selisihTableData.slice(start, start + selisihPageSize);
+  }, [selisihTableData, selisihCurrentPage, selisihPageSize]);
+
+  const totalSelisihPages = Math.ceil(selisihTableData.length / selisihPageSize);
+
+  // =============================
   // LOADING
   // =============================
 
@@ -656,6 +781,8 @@ export default function Dashboard() {
         Math.abs(a.value)
     )
     .slice(0, 8);
+
+
 
   const handleAskAI = async () => {
     if (aiGenerating) return;
@@ -1234,106 +1361,263 @@ export default function Dashboard() {
 {/* ========================= */}
 
 <TabsContent value="analytics" className="mt-0">
-  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-
-    {/* BAR CHART */}
+  <div className="flex flex-col gap-6">
+    
+    {/* CHART CARD */}
     <Card className="border border-slate-200 rounded-xl shadow-sm bg-white overflow-hidden">
+      <div className="border-b border-slate-200 bg-white px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+            Analytics Perbandingan Area (All Cabang)
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Analisis kontribusi dan perbandingan total stock serta selisih per Area
+          </p>
+        </div>
 
-      <div className="border-b border-slate-200 bg-white px-6 py-5">
-        <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-          Top Selisih Stock
-        </h2>
-
-        <p className="text-sm text-slate-500 mt-1">
-          Item dengan selisih terbesar
-        </p>
-      </div>
-
-      <CardContent className="h-[420px] p-6">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={analyticsData}
-            layout="vertical"
-            margin={{
-              top: 10,
-              right: 20,
-              left: 20,
-              bottom: 10,
-            }}
+        {/* CONTROLS */}
+        <div className="flex items-center gap-2 bg-slate-50 p-1 border border-slate-200 rounded-lg self-start sm:self-auto">
+          <Button
+            size="sm"
+            variant={chartViewMode === 'percentage' ? 'default' : 'ghost'}
+            className={`h-8 px-3 text-xs font-semibold rounded-md transition-all ${
+              chartViewMode === 'percentage' ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+            onClick={() => setChartViewMode('percentage')}
           >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="#e2e8f0"
-            />
-
-            <XAxis type="number" />
-
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={150}
-              tick={{
-                fill: "#475569",
-                fontSize: 12,
-              }}
-            />
-
-            <Tooltip />
-
-            <Bar
-              dataKey="value"
-              radius={[0, 10, 10, 0]}
-            >
-              {analyticsData.map((entry, index) => (
-                <Cell
-                  key={index}
-                  fill={
-                    entry.value < 0
-                      ? "#ef4444"
-                      : "#10b981"
-                  }
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-
-    {/* PIE CHART */}
-    <Card className="border border-slate-200 rounded-xl shadow-sm bg-white overflow-hidden">
-
-      <div className="border-b border-slate-200 bg-white px-6 py-5">
-        <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-          Proporsi Stock
-        </h2>
-
-        <p className="text-sm text-slate-500 mt-1">
-          Distribusi stock plus, minus, dan balanced
-        </p>
+            Persentase (%)
+          </Button>
+          <Button
+            size="sm"
+            variant={chartViewMode === 'absolute' ? 'default' : 'ghost'}
+            className={`h-8 px-3 text-xs font-semibold rounded-md transition-all ${
+              chartViewMode === 'absolute' ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+            onClick={() => setChartViewMode('absolute')}
+          >
+            Nilai Qty (Aktual)
+          </Button>
+        </div>
       </div>
 
-      <CardContent className="h-[420px] p-6">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={pieData}
-              dataKey="value"
-              nameKey="name"
-              innerRadius={80}
-              outerRadius={120}
-              paddingAngle={4}
+      <CardContent className="p-6">
+        <div className="h-[450px] w-[100%] min-w-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={areaAnalyticsAllCabang}
+              margin={{
+                top: 20,
+                right: 30,
+                left: 20,
+                bottom: 30,
+              }}
             >
-              <Cell fill="#10b981" />
-              <Cell fill="#ef4444" />
-              <Cell fill="#3b82f6" />
-            </Pie>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis 
+                dataKey="area" 
+                tick={{ fill: '#475569', fontSize: 11, fontWeight: 500 }}
+                axisLine={{ stroke: '#cbd5e1' }}
+                tickLine={false}
+              />
+              <YAxis 
+                tick={{ fill: '#475569', fontSize: 11 }}
+                axisLine={{ stroke: '#cbd5e1' }}
+                tickLine={false}
+                label={{ 
+                  value: chartViewMode === 'percentage' ? 'Proporsi (%)' : 'Jumlah Unit Qty', 
+                  angle: -90, 
+                  position: 'insideLeft', 
+                  style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12, fontWeight: 500 }
+                }}
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: '#ffffff', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)' 
+                }}
+                labelStyle={{ fontWeight: 'bold', color: '#0f172a', marginBottom: '4px' }}
+                formatter={(value: any, name: any, props: any) => {
+                  const numValue = Number(value);
+                  const isPct = chartViewMode === 'percentage';
+                  
+                  // In tooltips, show BOTH percentage and absolute values for comprehensive analytics!
+                  const rowData = props.payload;
+                  let displayVal = '';
+                  
+                  if (name.includes('Last Qty')) {
+                    displayVal = isPct 
+                      ? `${numValue.toLocaleString()}% (${rowData.lastQty?.toLocaleString()} Qty)` 
+                      : `${numValue.toLocaleString()} Qty (${rowData.pctLastQty?.toLocaleString()}%)`;
+                  } else if (name.includes('Move Qty')) {
+                    displayVal = isPct 
+                      ? `${numValue.toLocaleString()}% (${rowData.moveQty?.toLocaleString()} Qty)` 
+                      : `${numValue.toLocaleString()} Qty (${rowData.pctMoveQty?.toLocaleString()}%)`;
+                  } else {
+                    displayVal = isPct 
+                      ? `${numValue.toLocaleString()}% (${rowData.selisih?.toLocaleString()} Qty)` 
+                      : `${numValue.toLocaleString()} Qty (${rowData.pctSelisih?.toLocaleString()}%)`;
+                  }
 
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
+                  return [displayVal, name];
+                }}
+              />
+              <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: 12, fontWeight: 500 }} />
+              
+              <Bar 
+                name={chartViewMode === 'percentage' ? 'Last Qty (%)' : 'Total Last Qty'} 
+                dataKey={chartViewMode === 'percentage' ? 'pctLastQty' : 'lastQty'} 
+                fill="#3b82f6" 
+                radius={[4, 4, 0, 0]} 
+              />
+              <Bar 
+                name={chartViewMode === 'percentage' ? 'Move Qty (%)' : 'Total Move Qty'} 
+                dataKey={chartViewMode === 'percentage' ? 'pctMoveQty' : 'moveQty'} 
+                fill="#f59e0b" 
+                radius={[4, 4, 0, 0]} 
+              />
+              <Bar 
+                name={chartViewMode === 'percentage' ? 'Selisih (%)' : 'Selisih'} 
+                dataKey={chartViewMode === 'percentage' ? 'pctSelisih' : 'selisih'} 
+                fill="#10b981" 
+                radius={[4, 4, 0, 0]} 
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
+
+    {/* DISCREPANCY TABLE CARD */}
+    <Card className="border border-slate-200 rounded-xl shadow-sm bg-white overflow-hidden">
+      <div className="border-b border-slate-200 bg-white px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+            Tabel Selisih Stock
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Menampilkan seluruh data barang yang mengalami selisih stock (Selisih ≠ 0)
+          </p>
+        </div>
+
+        {/* TABLE SEARCH */}
+        <div className="relative max-w-sm w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            value={selisihSearchTerm}
+            onChange={(e) => {
+              setSelisihSearchTerm(e.target.value);
+              setSelisihCurrentPage(1);
+            }}
+            placeholder="Cari di tabel selisih..."
+            className="pl-9 h-10 text-sm rounded-lg border-slate-200 bg-white focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-slate-50/50">
+              <TableRow className="border-b border-slate-200 hover:bg-transparent">
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700">Cabang</TableHead>
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700">Locator</TableHead>
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700">Search Key</TableHead>
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700">Name</TableHead>
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700">Uom</TableHead>
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700 text-right">Last Qty</TableHead>
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700 text-right">Move Qty</TableHead>
+                <TableHead className="py-3 px-6 text-sm font-semibold text-slate-700 text-right">Selisih</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedSelisihData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                    Tidak ada data selisih stock ditemukan
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedSelisihData.map((row, idx) => {
+                  const {
+                    cabangCol,
+                    locatorCol,
+                    searchKeyCol,
+                    nameCol,
+                    uomCol,
+                    lastQtyCol,
+                    moveQtyCol,
+                    selisihCol,
+                  } = selisihTableKeys;
+
+                  const selisihVal = Number(String(row[selisihCol] ?? 0).replace(/,/g, '')) || 0;
+                  const lastQtyVal = Number(String(row[lastQtyCol] ?? 0).replace(/,/g, '')) || 0;
+                  const moveQtyVal = Number(String(row[moveQtyCol] ?? 0).replace(/,/g, '')) || 0;
+
+                  return (
+                    <TableRow key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                      <TableCell className="py-3.5 px-6 text-sm font-medium text-slate-800">{String(row[cabangCol] || '-')}</TableCell>
+                      <TableCell className="py-3.5 px-6 text-sm text-slate-600 font-mono">{String(row[locatorCol] || '-')}</TableCell>
+                      <TableCell className="py-3.5 px-6 text-sm font-semibold text-slate-800 font-mono">{String(row[searchKeyCol] || '-')}</TableCell>
+                      <TableCell className="py-3.5 px-6 text-sm text-slate-700 max-w-[280px] truncate" title={String(row[nameCol] || '')}>
+                        {String(row[nameCol] || '-')}
+                      </TableCell>
+                      <TableCell className="py-3.5 px-6 text-sm text-slate-500 font-medium">{String(row[uomCol] || '-')}</TableCell>
+                      <TableCell className="py-3.5 px-6 text-sm font-mono text-right text-slate-600 font-medium">
+                        {lastQtyVal.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="py-3.5 px-6 text-sm font-mono text-right text-slate-600 font-medium">
+                        {moveQtyVal.toLocaleString()}
+                      </TableCell>
+                      <TableCell className={`py-3.5 px-6 text-sm font-mono text-right font-bold ${
+                        selisihVal < 0 ? 'text-red-600 bg-red-50/40 px-3 py-1 rounded' : 'text-emerald-600 bg-emerald-50/40 px-3 py-1 rounded'
+                      }`}>
+                        {selisihVal > 0 ? `+${selisihVal.toLocaleString()}` : selisihVal.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* TABLE PAGINATION */}
+        {totalSelisihPages > 1 && (
+          <div className="border-t border-slate-200 bg-slate-50/50 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+              Menampilkan <span className="text-slate-900 font-bold">{paginatedSelisihData.length}</span> dari <span className="text-slate-900 font-bold">{selisihTableData.length}</span> data selisih
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-md border-slate-200 hover:bg-slate-100"
+                disabled={selisihCurrentPage === 1}
+                onClick={() => setSelisihCurrentPage((prev) => Math.max(1, prev - 1))}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <div className="text-sm font-semibold text-slate-700 px-3">
+                Halaman {selisihCurrentPage} dari {totalSelisihPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 rounded-md border-slate-200 hover:bg-slate-100"
+                disabled={selisihCurrentPage === totalSelisihPages}
+                onClick={() => setSelisihCurrentPage((prev) => Math.min(totalSelisihPages, prev + 1))}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+
   </div>
 </TabsContent>
       </Tabs>

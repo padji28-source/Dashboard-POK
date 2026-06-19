@@ -30,9 +30,11 @@ import {
   AlertCircle,
   Database,
   ArrowLeft,
-  Loader2
+  Loader2,
+  FileSpreadsheet
 } from 'lucide-react';
 
+import * as XLSX from 'xlsx';
 import Select from 'react-select';
 
 interface DataAllProps {
@@ -50,6 +52,11 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
   const [whGroupFilter, setWhGroupFilter] = useState<string[]>([]);
   const [areaFilter, setAreaFilter] = useState<string[]>([]);
   const [locatorFilter, setLocatorFilter] = useState<string[]>([]);
+
+  // Search input terms for the multi-select dropdowns
+  const [whGroupSearch, setWhGroupSearch] = useState('');
+  const [areaSearch, setAreaSearch] = useState('');
+  const [locatorSearch, setLocatorSearch] = useState('');
 
   // Sorting
   const [sortConfig, setSortConfig] = useState<{
@@ -143,6 +150,120 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
       whCol, areaCol, locCol
     };
   }, [data, columns]);
+
+  const exportToExcel = () => {
+    try {
+      if (filteredData.length === 0) {
+        toast.error('Tidak ada data untuk diexport');
+        return;
+      }
+
+      const exportRows = filteredData.map((row) => {
+        const obj: any = {};
+        columns.forEach((col) => {
+          obj[col] = row[col];
+        });
+        return obj;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(exportRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Data All MTS2');
+
+      XLSX.writeFile(workbook, 'Data_All_MTS2.xlsx');
+      toast.success('Excel berhasil didownload');
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengunduh Excel');
+    }
+  };
+
+  // WH Group custom option list and change handler
+  const whGroupOptions = useMemo(() => {
+    const baseOptions = filterOptions.whGroups.map(g => ({ value: g, label: g }));
+    if (whGroupSearch.trim()) {
+      const searchLower = whGroupSearch.toLowerCase();
+      const matching = baseOptions.filter(o => o.label.toLowerCase().includes(searchLower));
+      if (matching.length > 1) {
+        return [
+          { value: '__SELECT_ALL_MATCHING__', label: `✨ Pilih Semua Hasil Cocok "${whGroupSearch}" (${matching.length} item)` },
+          ...baseOptions
+        ];
+      }
+    }
+    return baseOptions;
+  }, [filterOptions.whGroups, whGroupSearch]);
+
+  const handleWhGroupChange = (selected: any) => {
+    if (selected && selected.some((s: any) => s.value === '__SELECT_ALL_MATCHING__')) {
+      const searchLower = whGroupSearch.toLowerCase();
+      const matching = filterOptions.whGroups.filter(g => g.toLowerCase().includes(searchLower));
+      const combined = Array.from(new Set([...whGroupFilter, ...matching]));
+      setWhGroupFilter(combined);
+      setWhGroupSearch('');
+    } else {
+      setWhGroupFilter(selected ? selected.map((s: any) => s.value) : []);
+    }
+    setCurrentPage(1);
+  };
+
+  // Area custom option list and change handler
+  const areaOptions = useMemo(() => {
+    const baseOptions = filterOptions.areas.map(g => ({ value: g, label: g }));
+    if (areaSearch.trim()) {
+      const searchLower = areaSearch.toLowerCase();
+      const matching = baseOptions.filter(o => o.label.toLowerCase().includes(searchLower));
+      if (matching.length > 1) {
+        return [
+          { value: '__SELECT_ALL_MATCHING__', label: `✨ Pilih Semua Hasil Cocok "${areaSearch}" (${matching.length} item)` },
+          ...baseOptions
+        ];
+      }
+    }
+    return baseOptions;
+  }, [filterOptions.areas, areaSearch]);
+
+  const handleAreaChange = (selected: any) => {
+    if (selected && selected.some((s: any) => s.value === '__SELECT_ALL_MATCHING__')) {
+      const searchLower = areaSearch.toLowerCase();
+      const matching = filterOptions.areas.filter(g => g.toLowerCase().includes(searchLower));
+      const combined = Array.from(new Set([...areaFilter, ...matching]));
+      setAreaFilter(combined);
+      setAreaSearch('');
+    } else {
+      setAreaFilter(selected ? selected.map((s: any) => s.value) : []);
+    }
+    setCurrentPage(1);
+  };
+
+  // Locator custom option list and change handler
+  const locatorOptions = useMemo(() => {
+    const baseOptions = filterOptions.locators.map(g => ({ value: g, label: g }));
+    if (locatorSearch.trim()) {
+      const searchLower = locatorSearch.toLowerCase();
+      const matching = baseOptions.filter(o => o.label.toLowerCase().includes(searchLower));
+      if (matching.length > 1) {
+        return [
+          { value: '__SELECT_ALL_MATCHING__', label: `✨ Pilih Semua Hasil Cocok "${locatorSearch}" (${matching.length} item)` },
+          ...baseOptions
+        ];
+      }
+    }
+    return baseOptions;
+  }, [filterOptions.locators, locatorSearch]);
+
+  const handleLocatorChange = (selected: any) => {
+    if (selected && selected.some((s: any) => s.value === '__SELECT_ALL_MATCHING__')) {
+      const searchLower = locatorSearch.toLowerCase();
+      const matching = filterOptions.locators.filter(g => g.toLowerCase().includes(searchLower));
+      const combined = Array.from(new Set([...locatorFilter, ...matching]));
+      setLocatorFilter(combined);
+      setLocatorSearch('');
+    } else {
+      setLocatorFilter(selected ? selected.map((s: any) => s.value) : []);
+    }
+    setCurrentPage(1);
+  };
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -291,6 +412,10 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
               <p className="text-xs uppercase tracking-wider font-semibold text-slate-500">Total QTY Focus</p>
               <p className="text-xl font-bold text-emerald-600 leading-none mt-1">{totals.totalQty.toLocaleString()}</p>
             </div>
+            <Button onClick={exportToExcel} className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm font-medium transition-all">
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Download Excel
+            </Button>
             <Button onClick={loadData} variant="outline" className="h-10 px-4 rounded-lg bg-white shadow-sm border-slate-200 text-slate-700">
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
@@ -323,9 +448,11 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
                 <div className="min-w-[250px] flex-1 max-w-sm z-20 relative">
                   <Select
                     isMulti
-                    options={filterOptions.whGroups.map(g => ({ value: g, label: g }))}
+                    options={whGroupOptions}
                     value={whGroupFilter.map(g => ({ value: g, label: g }))}
-                    onChange={(selected: any) => { setWhGroupFilter(selected ? selected.map((s: any) => s.value) : []); setCurrentPage(1); }}
+                    onChange={handleWhGroupChange}
+                    inputValue={whGroupSearch}
+                    onInputChange={(val) => setWhGroupSearch(val)}
                     className="text-sm"
                     classNamePrefix="rs"
                     placeholder="Semua WH Group..."
@@ -339,9 +466,11 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
                 <div className="min-w-[200px] flex-1 max-w-sm z-20 relative">
                   <Select
                     isMulti
-                    options={filterOptions.areas.map(g => ({ value: g, label: g }))}
+                    options={areaOptions}
                     value={areaFilter.map(g => ({ value: g, label: g }))}
-                    onChange={(selected: any) => { setAreaFilter(selected ? selected.map((s: any) => s.value) : []); setCurrentPage(1); }}
+                    onChange={handleAreaChange}
+                    inputValue={areaSearch}
+                    onInputChange={(val) => setAreaSearch(val)}
                     className="text-sm"
                     classNamePrefix="rs"
                     placeholder="Semua Area..."
@@ -355,9 +484,11 @@ export default function DataAll({ onBack, csvUrl }: DataAllProps) {
                 <div className="min-w-[250px] flex-1 max-w-sm z-20 relative">
                   <Select
                     isMulti
-                    options={filterOptions.locators.map(g => ({ value: g, label: g }))}
+                    options={locatorOptions}
                     value={locatorFilter.map(g => ({ value: g, label: g }))}
-                    onChange={(selected: any) => { setLocatorFilter(selected ? selected.map((s: any) => s.value) : []); setCurrentPage(1); }}
+                    onChange={handleLocatorChange}
+                    inputValue={locatorSearch}
+                    onInputChange={(val) => setLocatorSearch(val)}
                     className="text-sm"
                     classNamePrefix="rs"
                     placeholder="Semua Locator..."
